@@ -1,0 +1,6 @@
+{
+  "name": "Manga Downloader Pro",
+  "description": "Dashboard de automação para download de mangás e capítulos com gerenciamento em tempo real, links diretos de imagens e histórico.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
