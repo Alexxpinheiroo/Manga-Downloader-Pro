@@ -37,7 +37,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const terminalEndRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
   const [copiedTerminal, setCopiedTerminal] = useState(false);
-  const [selectedMangaForQuickLink, setSelectedMangaForQuickLink] = useState<MangaItem | null>(null);
 
   // Auto-scroll terminal when new log entries arrive
   useEffect(() => {
@@ -242,7 +241,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </section>
 
       {/* History Grid: Recent Downloads */}
-      <section className="flex flex-col gap-6">
+      <section className="flex flex-col gap-4">
         <div className="flex items-center justify-between border-b border-[#3c4a42] pb-3">
           <div className="flex items-center gap-3">
             <h3 className="text-xl font-bold text-[#dae2fd]">Downloads Recentes</h3>
@@ -262,117 +261,60 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </button>
         </div>
 
-        {/* 6 Manga Cards Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
-          {mangas.map((manga) => (
-            <div
-              key={manga.id}
-              className="group relative flex flex-col gap-2 cursor-pointer"
-            >
-              <div
-                onClick={() => onSelectMangaForReader(manga)}
-                className="aspect-[2/3] w-full rounded-lg overflow-hidden relative shadow-xl border border-[#3c4a42]/40 bg-[#131b2e]"
-              >
-                <img
-                  src={manga.coverUrl}
-                  alt={manga.title}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent"></div>
-
-                {/* Status Badge */}
-                <div className="absolute top-2 right-2 px-2 py-1 glass-panel rounded text-[10px] font-bold text-[#4edea3] flex items-center gap-1 uppercase tracking-tighter shadow">
-                  <span className="material-symbols-filled text-[12px]">check_circle</span>
-                  <span>{manga.status}</span>
-                </div>
-
-                {/* Quick inspect image trigger on hover */}
-                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center gap-2 transition-opacity p-2 text-center">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onSelectMangaForReader(manga);
-                    }}
-                    className="px-3 py-1.5 bg-[#10b981] text-[#003824] font-bold rounded-lg text-xs shadow hover:bg-[#6ffbbe]"
-                  >
-                    Ler / Abrir
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedMangaForQuickLink(manga);
-                    }}
-                    className="px-2 py-1 bg-[#171f33]/90 text-[#4edea3] text-[10px] font-mono rounded border border-[#3c4a42] hover:bg-[#222a3d]"
-                  >
-                    Link da Imagem
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex flex-col">
-                <h4
-                  onClick={() => onSelectMangaForReader(manga)}
-                  className="font-bold text-sm text-[#dae2fd] truncate hover:text-[#4edea3] transition-colors"
-                >
-                  {manga.title}
-                </h4>
-                <p className="text-xs font-mono text-[#bbcabf]">{manga.chapter}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Quick Image Link Modal Popup for a single manga */}
-      {selectedMangaForQuickLink && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-[#131b2e] border border-[#3c4a42] rounded-xl p-6 max-w-lg w-full space-y-4">
-            <div className="flex justify-between items-center border-b border-[#3c4a42] pb-3">
-              <h4 className="font-bold text-base text-[#dae2fd]">
-                Direct Cover URL: {selectedMangaForQuickLink.title}
-              </h4>
-              <button
-                onClick={() => setSelectedMangaForQuickLink(null)}
-                className="text-[#bbcabf] hover:text-[#4edea3]"
-              >
-                <span className="material-symbols-outlined">close</span>
-              </button>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <img
-                src={selectedMangaForQuickLink.coverUrl}
-                alt={selectedMangaForQuickLink.title}
-                className="w-16 h-24 object-cover rounded border border-[#3c4a42]"
-              />
-              <div className="flex-1 space-y-2 overflow-hidden">
-                <p className="text-xs font-mono text-[#4edea3] break-all bg-[#0b1326] p-2 rounded border border-[#2d3449]">
-                  {selectedMangaForQuickLink.coverUrl}
-                </p>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => {
-                      navigator.clipboard.writeText(selectedMangaForQuickLink.coverUrl);
-                      alert('URL da capa copiada com sucesso!');
-                    }}
-                    className="px-3 py-1.5 bg-[#10b981] text-[#003824] font-bold rounded text-xs"
-                  >
-                    Copiar URL
-                  </button>
-                  <a
-                    href={selectedMangaForQuickLink.coverUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-3 py-1.5 bg-[#222a3d] text-[#dae2fd] rounded text-xs border border-[#3c4a42]"
-                  >
-                    Abrir Imagem Directa
-                  </a>
-                </div>
-              </div>
-            </div>
+        {/* List Table of Manga Items */}
+        <div className="bg-[#131b2e] border border-[#3c4a42] rounded-xl overflow-hidden shadow-xl">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-[#3c4a42] bg-[#0b1426] text-[11px] font-mono text-[#bbcabf] uppercase tracking-wider">
+                  <th className="px-6 py-3">Mangá / Obra</th>
+                  <th className="px-6 py-3">Capítulo</th>
+                  <th className="px-6 py-3">Formato</th>
+                  <th className="px-6 py-3">Tamanho</th>
+                  <th className="px-6 py-3 text-right">Ações</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#3c4a42]/30 text-xs font-sans text-[#dae2fd]">
+                {mangas.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-6 py-6 text-center text-[#86948a] font-mono">
+                      Nenhum download concluído ainda.
+                    </td>
+                  </tr>
+                ) : (
+                  mangas.slice(0, 6).map((manga) => (
+                    <tr key={manga.id} className="hover:bg-[#172136]/50 transition-colors">
+                      <td className="px-6 py-3.5 font-bold text-[#dae2fd] max-w-xs truncate">
+                        {manga.title}
+                      </td>
+                      <td className="px-6 py-3.5 font-mono text-[#4edea3] font-semibold">
+                        {manga.chapter}
+                      </td>
+                      <td className="px-6 py-3.5">
+                        <span className="px-2 py-0.5 bg-[#0b1326] border border-[#3c4a42]/60 rounded text-[10px] font-mono text-[#bbcabf]">
+                          {manga.format || 'RAW'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-3.5 font-mono">
+                        {manga.fileSize || '---'}
+                      </td>
+                      <td className="px-6 py-3.5 text-right">
+                        <button
+                          onClick={() => onSelectMangaForReader(manga)}
+                          className="px-3 py-1.5 bg-[#10b981] text-[#003824] font-bold rounded-lg text-xs hover:bg-[#6ffbbe] transition-colors flex items-center gap-1 cursor-pointer ml-auto"
+                        >
+                          <span className="material-symbols-outlined text-[14px]">visibility</span>
+                          <span>Visualizar</span>
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
-      )}
+      </section>
     </div>
   );
 };

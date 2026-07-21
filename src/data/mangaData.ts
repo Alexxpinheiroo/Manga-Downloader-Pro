@@ -184,7 +184,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   outputDirectory: 'g:/Manga-Downloader-Pro/downloads',
   concurrentDownloads: 4,
   maxThreads: 8,
-  autoExtractCBZ: true,
+  autoExtractCBZ: false,
   autoDownloadFromClipboard: true,
   browserNotifications: true,
   proxyEnabled: false,

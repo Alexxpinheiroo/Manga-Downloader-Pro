@@ -39,7 +39,7 @@ if (!fs.existsSync(SETTINGS_FILE)) {
     outputDirectory: path.join(__dirname, 'downloads'),
     concurrentDownloads: 4,
     maxThreads: 8,
-    autoExtractCBZ: true,
+    autoExtractCBZ: false,
     autoDownloadFromClipboard: true,
     browserNotifications: true,
     proxyEnabled: false,
@@ -106,10 +106,44 @@ function resolveImageUrl(src: string, chapterData: any): string {
   return finalUrl.replace(/([^:])\/\/\/+/g, '$1/').replace(/([^:])\/\/+/g, '$1/');
 }
 
+function resolveObraCoverUrl(src: string, scanId: number, obrId: number, isWp: boolean): string {
+  if (!src) return '';
+  if (src.startsWith('http')) return src;
+
+  const baseCdn = 'https://cdn.verdinha.wtf';
+  const isWpType = src.startsWith('uploads/') || src.startsWith('wp-content/') || src.startsWith('manga_') || src.startsWith('WP-manga');
+
+  if (isWpType || isWp) {
+    let relativePath = src;
+    if (src.startsWith('WP-manga')) {
+      relativePath = `wp-content/uploads/${src}`;
+    } else if (src.startsWith('uploads/')) {
+      relativePath = `wp-content/${src}`;
+    } else if (src.startsWith('manga_')) {
+      relativePath = `wp-content/uploads/WP-manga/data/${src}`;
+    } else if (!src.startsWith('wp-content/')) {
+      relativePath = `wp-content/uploads/WP-manga/data${src.startsWith('/') ? '' : '/'}${src}`;
+    }
+    const finalUrl = `${baseCdn}/${relativePath.startsWith('/') ? '' : '/'}${relativePath}`;
+    return finalUrl.replace(/([^:])\/\/\/+/g, '$1/').replace(/([^:])\/\/+/g, '$1/');
+  }
+
+  const relativePath = `scans/${scanId}/obras/${obrId}`;
+  const finalUrl = `${baseCdn}/${relativePath}/${src}`;
+  return finalUrl.replace(/([^:])\/\/\/+/g, '$1/').replace(/([^:])\/\/+/g, '$1/');
+}
+
 // Helper function to download file
 function downloadFile(url: string, dest: string, headers: Record<string, string>): Promise<void> {
   return new Promise((resolve, reject) => {
     const file = fs.createWriteStream(dest);
+
+    file.on('error', (err) => {
+      file.close();
+      fs.unlink(dest, () => {});
+      reject(err);
+    });
+
     const parsedUrl = new URL(url);
     const options = {
       hostname: parsedUrl.hostname,
@@ -120,8 +154,10 @@ function downloadFile(url: string, dest: string, headers: Record<string, string>
       }
     };
 
-    https.get(options, (response) => {
+    const req = https.get(options, (response) => {
       if (response.statusCode !== 200) {
+        file.close();
+        fs.unlink(dest, () => {});
         reject(new Error(`Failed to get '${url}' (${response.statusCode})`));
         return;
       }
@@ -130,7 +166,10 @@ function downloadFile(url: string, dest: string, headers: Record<string, string>
         file.close();
         resolve();
       });
-    }).on('error', (err) => {
+    });
+
+    req.on('error', (err) => {
+      file.close();
       fs.unlink(dest, () => {});
       reject(err);
     });
@@ -196,7 +235,12 @@ async function downloadChapterTask(chapterId: string, outputBaseDir: string, acc
   const finalFolder = path.join(outputBaseDir, cleanMangaTitle, cleanChapterName);
   fs.mkdirSync(finalFolder, { recursive: true });
 
-  const coverUrl = resolveImageUrl(pages[0]?.src || pages[0] || '', chapterData);
+  // Resolve the actual manga cover url
+  const scanId = chapterData.scan_id || 1;
+  const obrId = chapterData.obr_id || 0;
+  const isWp = !!chapterData.is_wp;
+  const obrImagem = chapterData.obra?.obr_imagem || '';
+  const coverUrl = obrImagem ? resolveObraCoverUrl(obrImagem, scanId, obrId, isWp) : '';
 
   // Initialize task in frontend
   const initialTask = {
@@ -227,6 +271,19 @@ async function downloadChapterTask(chapterId: string, outputBaseDir: string, acc
     'Referer': `https://verdinha.wtf/`
   };
 
+  // Download the actual cover first as 'capa'
+  if (coverUrl) {
+    try {
+      const coverExt = path.extname(new URL(coverUrl).pathname) || '.jpg';
+      const coverDest = path.join(finalFolder, `capa${coverExt}`);
+      logToClient('EXEC', `Baixando a capa real da obra ("${mangaTitle}")...`);
+      await downloadFile(coverUrl, coverDest, downloadHeaders);
+      logToClient('OK', `Capa real salva com sucesso como: capa${coverExt}`);
+    } catch (e: any) {
+      logToClient('WARN', `Não foi possível obter a capa real da obra: ${e.message}`);
+    }
+  }
+
   const startTime = Date.now();
 
   for (let idx = 0; idx < pages.length; idx++) {
@@ -238,9 +295,8 @@ async function downloadChapterTask(chapterId: string, outputBaseDir: string, acc
     const ext = path.extname(new URL(pageUrl).pathname) || '.jpg';
     
     // Naming logic:
-    // First page (index 0) -> capa
-    // Subsequent pages -> 1, 2, 3...
-    const fileName = idx === 0 ? `capa${ext}` : `${idx}${ext}`;
+    // First page index 0 is saved as 1, index 1 as 2, etc.
+    const fileName = `${idx + 1}${ext}`;
     const destPath = path.join(finalFolder, fileName);
 
     logToClient('EXEC', `Baixando página: ${fileName}...`);
@@ -415,6 +471,57 @@ async function downloadObraTask(obraSlug: string, outputBaseDir: string, accessT
   }
 }
 
+// Scrape entire genre/category of mangas
+async function downloadGenreTask(genreId: string, outputBaseDir: string, accessToken: string, autoExtractCBZ: boolean) {
+  logToClient('INFO', `Iniciando raspagem de obras da categoria/gênero ID: ${genreId}`);
+
+  const apiHeaders: Record<string, string> = {
+    'Accept': 'application/json',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+  };
+  if (accessToken) {
+    apiHeaders['Authorization'] = `Bearer ${accessToken}`;
+  }
+
+  try {
+    // Fetch updates for this genre
+    const apiUrl = `https://api.verdinha.wtf/obras/atualizacoes?pagina=1&limite=48&gen_id=${genreId}`;
+    const response = await fetch(apiUrl, { headers: apiHeaders });
+    
+    if (response.status === 403) {
+      logToClient('ERROR', `Acesso negado para o gênero ${genreId}. Forneça um Token de Acesso VIP nas Configurações.`);
+      return;
+    }
+    
+    if (!response.ok) {
+      throw new Error(`Status ${response.status}`);
+    }
+
+    const data = await response.json();
+    const obras: any[] = data.obras || [];
+    
+    logToClient('INFO', `Gênero ID ${genreId} carregado. Encontradas ${obras.length} obras para baixar.`);
+    
+    if (obras.length === 0) {
+      logToClient('WARN', `Nenhuma obra encontrada para esta categoria.`);
+      return;
+    }
+
+    for (const obra of obras) {
+      const slug = obra.obr_slug || String(obra.obr_id);
+      logToClient('INFO', `Enfileirando obra: "${obra.obr_nome}" (${slug})`);
+      // Download the whole obra
+      await downloadObraTask(slug, outputBaseDir, accessToken, autoExtractCBZ);
+      // Small pause between obras to protect the server
+      await new Promise(resolve => setTimeout(resolve, 5000));
+    }
+    
+    logToClient('OK', `Download de todas as obras da categoria/gênero ID ${genreId} concluído!`);
+  } catch (err: any) {
+    logToClient('ERROR', `Erro ao buscar obras da categoria/gênero ${genreId}: ${err.message}`);
+  }
+}
+
 async function startServer() {
   const app = express();
   app.use(express.json());
@@ -503,6 +610,10 @@ async function startServer() {
     const token = settings.accessToken || '';
     const cbz = !!settings.autoExtractCBZ;
 
+    // Check if genre/category URL
+    // e.g. https://verdinha.wtf/?tab=lendo#/?gen_id=5
+    const genMatch = url.match(/gen_id=(\d+)/);
+
     // Check if chapter URL
     // e.g., https://verdinha.wtf/?tab=lendo#/capitulo/396410
     const chapMatch = url.match(/capitulo\/(\d+)/);
@@ -511,7 +622,12 @@ async function startServer() {
     // e.g., https://verdinha.wtf/?tab=lendo#/obras/salvando-minha-garota-magica
     const obraMatch = url.match(/obras\/([a-zA-Z0-9_-]+)/);
 
-    if (chapMatch) {
+    if (genMatch) {
+      const genreId = genMatch[1];
+      // Run async
+      downloadGenreTask(genreId, outDir, token, cbz);
+      res.json({ success: true, message: 'Download de categoria/gênero iniciado' });
+    } else if (chapMatch) {
       const capId = chapMatch[1];
       // Run async
       downloadChapterTask(capId, outDir, token, cbz);
@@ -527,7 +643,7 @@ async function startServer() {
         downloadChapterTask(url.trim(), outDir, token, cbz);
         res.json({ success: true, message: 'Download de capítulo iniciado' });
       } else {
-        res.status(400).json({ error: 'Não foi possível identificar o capítulo ou obra a partir da URL fornecida.' });
+        res.status(400).json({ error: 'Não foi possível identificar o capítulo, obra ou categoria/gênero a partir da URL fornecida.' });
       }
     }
   });

@@ -78,63 +78,64 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
         </div>
       </div>
 
-      {/* Grid of Manga Items */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filtered.map((manga) => (
-          <div
-            key={manga.id}
-            className="bg-[#131b2e] border border-[#3c4a42] rounded-xl p-4 flex gap-4 hover:border-[#4edea3]/50 transition-all shadow-xl group"
-          >
-            <div
-              onClick={() => onSelectMangaForReader(manga)}
-              className="w-24 h-36 rounded-lg overflow-hidden bg-[#060e20] shrink-0 relative cursor-pointer border border-[#3c4a42]"
-            >
-              <img
-                src={manga.coverUrl}
-                alt={manga.title}
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-              />
-              <div className="absolute top-1 left-1 px-1.5 py-0.5 bg-black/80 rounded text-[9px] font-mono text-[#4edea3]">
-                {manga.format || 'CBZ'}
-              </div>
-            </div>
-
-            <div className="flex flex-col justify-between flex-1 min-w-0">
-              <div className="space-y-1">
-                <h4
-                  onClick={() => onSelectMangaForReader(manga)}
-                  className="font-bold text-base text-[#dae2fd] truncate cursor-pointer hover:text-[#4edea3]"
-                >
-                  {manga.title}
-                </h4>
-                <p className="text-xs font-mono text-[#4edea3] font-semibold">{manga.chapter}</p>
-                <p className="text-[11px] text-[#bbcabf] line-clamp-2">{manga.description}</p>
-              </div>
-
-              <div className="pt-2 border-t border-[#2d3449] flex items-center justify-between text-[11px] font-mono text-[#bbcabf]">
-                <span>{manga.fileSize || '35.0 MB'}</span>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => onSelectMangaForReader(manga)}
-                    className="px-2.5 py-1 bg-[#10b981] text-[#003824] font-bold rounded text-xs hover:bg-[#6ffbbe] transition-colors"
-                  >
-                    Ler / Ver
-                  </button>
-                  <a
-                    href={manga.coverUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="p-1 bg-[#222a3d] text-[#4edea3] rounded border border-[#3c4a42] hover:bg-[#2d3449]"
-                    title="Abrir capa em alta resolução em nova aba"
-                  >
-                    <span className="material-symbols-outlined text-[16px]">open_in_new</span>
-                  </a>
-                </div>
-              </div>
-            </div>
-          </div>
-        ))}
+      {/* List Table of Manga Items */}
+      <div className="bg-[#131b2e] border border-[#3c4a42] rounded-xl overflow-hidden shadow-xl">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="border-b border-[#3c4a42] bg-[#0b1426] text-[11px] font-mono text-[#bbcabf] uppercase tracking-wider">
+                <th className="px-6 py-4">Mangá / Obra</th>
+                <th className="px-6 py-4">Capítulo</th>
+                <th className="px-6 py-4">Formato</th>
+                <th className="px-6 py-4">Tamanho</th>
+                <th className="px-6 py-4">Data Download</th>
+                <th className="px-6 py-4 text-right">Ações</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#3c4a42]/30 text-xs font-sans text-[#dae2fd]">
+              {filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-6 py-8 text-center text-[#86948a] font-mono">
+                    Nenhum mangá salvo nesta categoria.
+                  </td>
+                </tr>
+              ) : (
+                filtered.map((manga) => (
+                  <tr key={manga.id} className="hover:bg-[#172136]/50 transition-colors group">
+                    <td className="px-6 py-4 font-bold text-[#dae2fd] max-w-xs truncate">
+                      {manga.title}
+                    </td>
+                    <td className="px-6 py-4 font-mono text-[#4edea3] font-semibold">
+                      {manga.chapter}
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="px-2 py-0.5 bg-[#0b1326] border border-[#3c4a42]/60 rounded text-[10px] font-mono text-[#bbcabf]">
+                        {manga.format || 'RAW'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 font-mono">
+                      {manga.fileSize || '---'}
+                    </td>
+                    <td className="px-6 py-4 text-[#86948a] font-mono">
+                      {manga.downloadedAt || 'Recente'}
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => onSelectMangaForReader(manga)}
+                          className="px-3 py-1.5 bg-[#10b981] text-[#003824] font-bold rounded-lg text-xs hover:bg-[#6ffbbe] transition-colors flex items-center gap-1 cursor-pointer"
+                        >
+                          <span className="material-symbols-outlined text-[14px]">visibility</span>
+                          <span>Visualizar</span>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
