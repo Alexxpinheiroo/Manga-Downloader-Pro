@@ -2,7 +2,7 @@
   "outputDirectory": "G:\\Manga-Downloader-Pro\\downloads",
   "concurrentDownloads": 4,
   "maxThreads": 8,
-  "autoExtractCBZ": true,
+  "autoExtractCBZ": false,
   "autoDownloadFromClipboard": true,
   "browserNotifications": true,
   "proxyEnabled": false,
@@ -12,6 +12,10 @@
   "serverStatus": "Online",
   "theme": "Emerald Dark",
   "accessToken": "9fd19cc9e1fc5073caeafb46e85eeea338300f6ccfb5690ec791cd0385e1e5ac970416609f8ed0f535cfcd81d3d4655b2b96332cee445cca7c41da22113d44f4",
+<<<<<<< HEAD
   "email": "fasilitamarcelo@gmail.com",
+=======
+  "email": "Fasilitamarcelo@gmail.com",
+>>>>>>> 270aa101259daeaa60881de7d2e130302ad38520
   "password": "paraguai123"
 }
