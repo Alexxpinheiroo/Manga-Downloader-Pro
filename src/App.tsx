@@ -25,13 +25,13 @@ export default function App() {
   const [currentTab, setCurrentTab] = useState<'dashboard' | 'tasks' | 'history' | 'settings'>('dashboard');
   const [outputDirectory, setOutputDirectory] = useState('/Downloads/Mangas');
   const [urlInput, setUrlInput] = useState('');
-  const [activeProgress, setActiveProgress] = useState(45);
+  const [activeProgress, setActiveProgress] = useState(0);
   const [isDownloading, setIsDownloading] = useState(false);
 
-  // Data states
-  const [mangas, setMangas] = useState<MangaItem[]>(INITIAL_MANGAS);
-  const [tasks, setTasks] = useState<DownloadTask[]>(INITIAL_TASKS);
-  const [logs, setLogs] = useState<LogEntry[]>(INITIAL_LOGS);
+  // Data states (initially empty, loaded from server)
+  const [mangas, setMangas] = useState<MangaItem[]>([]);
+  const [tasks, setTasks] = useState<DownloadTask[]>([]);
+  const [logs, setLogs] = useState<LogEntry[]>([]);
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
 
   // Modal states
@@ -41,6 +41,95 @@ export default function App() {
   const [selectedReaderManga, setSelectedReaderManga] = useState<MangaItem | null>(null);
   const [lastClipboardUrl, setLastClipboardUrl] = useState<string>('');
   const [clipboardToast, setClipboardToast] = useState<string | null>(null);
+
+  // Load initial server data and setup real-time EventSource listener
+  useEffect(() => {
+    const loadInitialData = async () => {
+      try {
+        const settingsRes = await fetch('/api/settings');
+        if (settingsRes.ok) {
+          const settingsData = await settingsRes.json();
+          setSettings(settingsData);
+          setOutputDirectory(settingsData.outputDirectory);
+        }
+        
+        const mangasRes = await fetch('/api/mangas');
+        if (mangasRes.ok) {
+          const mangasData = await mangasRes.json();
+          setMangas(mangasData);
+        }
+
+        const tasksRes = await fetch('/api/tasks');
+        if (tasksRes.ok) {
+          const tasksData = await tasksRes.json();
+          setTasks(tasksData);
+        }
+      } catch (e) {
+        console.error('Error loading initial data:', e);
+      }
+    };
+    loadInitialData();
+
+    // EventSource (SSE) for real-time progress and logs from the backend
+    const eventSource = new EventSource('/api/events');
+    
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'log') {
+          setLogs(prev => [...prev, data.log]);
+        } else if (data.type === 'task-new') {
+          setTasks(prev => [data.task, ...prev]);
+          setIsDownloading(true);
+        } else if (data.type === 'task-update') {
+          setTasks(prev => prev.map(t => t.id === data.task.id ? { ...t, ...data.task } : t));
+          if (data.task.progress !== undefined) {
+            setActiveProgress(data.task.progress);
+          }
+          if (data.task.status === 'Completed') {
+            setIsDownloading(false);
+            
+            // Confetti explosion
+            try {
+              confetti({
+                particleCount: 125,
+                spread: 85,
+                origin: { y: 0.6 },
+                colors: ['#10b981', '#6ffbbe', '#34d399', '#3b82f6', '#f59e0b', '#ec4899'],
+              });
+            } catch {}
+
+            // Send notification
+            if (settings.browserNotifications && 'Notification' in window) {
+              const triggerNotify = () => {
+                new Notification('Manga Downloader Pro 📥', {
+                  body: `O capítulo "${data.task.chapterName}" de "${data.task.mangaTitle}" foi baixado com sucesso!`,
+                  icon: 'https://cdn-icons-png.flaticon.com/512/3145/3145765.png',
+                });
+              };
+              if (Notification.permission === 'granted') {
+                triggerNotify();
+              } else if (Notification.permission !== 'denied') {
+                Notification.requestPermission().then(perm => {
+                  if (perm === 'granted') triggerNotify();
+                });
+              }
+            }
+          } else if (data.task.status === 'Error') {
+            setIsDownloading(false);
+          }
+        } else if (data.type === 'manga-new') {
+          setMangas(prev => [data.manga, ...prev]);
+        }
+      } catch (e) {
+        console.error('Error handling SSE message:', e);
+      }
+    };
+
+    return () => {
+      eventSource.close();
+    };
+  }, [settings.browserNotifications]);
 
   // Clipboard Auto-Download Listener Effect
   useEffect(() => {
@@ -58,11 +147,9 @@ export default function App() {
           trimmed !== lastClipboardUrl
         ) {
           const isMangaUrl =
-            /manga|capitulo|chapter|read|scan|comic|mangadex|mangalivre|manganato|chap/i.test(
+            /manga|capitulo|chapter|read|scan|comic|mangadex|mangalivre|manganato|chap|verdinha/i.test(
               trimmed
-            ) ||
-            trimmed.includes('chapter') ||
-            trimmed.includes('manga');
+            );
 
           if (isMangaUrl) {
             setLastClipboardUrl(trimmed);
@@ -86,78 +173,9 @@ export default function App() {
     };
   }, [settings.autoDownloadFromClipboard, lastClipboardUrl]);
 
-  // Timer interval for realistic downloading simulation
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (isDownloading) {
-      interval = setInterval(() => {
-        setActiveProgress((prev) => {
-          if (prev >= 100) {
-            setIsDownloading(false);
-            // Append completion log
-            const now = new Date();
-            const timeStr = now.toTimeString().split(' ')[0];
-            setLogs((l) => [
-              ...l,
-              {
-                id: String(Date.now()),
-                timestamp: timeStr,
-                type: 'OK',
-                message: 'Download finalizado! Arquivo verificado e salvo com sucesso [100%].',
-              },
-            ]);
-
-            // Update downloading task to completed
-            setTasks((tList) =>
-              tList.map((t) => (t.status === 'Downloading' ? { ...t, status: 'Completed', progress: 100 } : t))
-            );
-
-            // Trigger festive confetti explosion on 100% completion
-            try {
-              confetti({
-                particleCount: 120,
-                spread: 80,
-                origin: { y: 0.6 },
-                colors: ['#10b981', '#6ffbbe', '#34d399', '#3b82f6', '#f59e0b', '#ec4899'],
-              });
-            } catch {
-              // Ignore if canvas not supported
-            }
-
-            // Send Browser Notification
-            if (settings.browserNotifications && 'Notification' in window) {
-              const triggerNotify = () => {
-                try {
-                  new Notification('Manga Downloader Pro 📥', {
-                    body: 'Capítulo baixado e salvo com sucesso! Todas as páginas foram extraídas.',
-                    icon: 'https://cdn-icons-png.flaticon.com/512/3145/3145765.png',
-                  });
-                } catch {
-                  // Fallback if blocked
-                }
-              };
-
-              if (Notification.permission === 'granted') {
-                triggerNotify();
-              } else if (Notification.permission !== 'denied') {
-                Notification.requestPermission().then((perm) => {
-                  if (perm === 'granted') triggerNotify();
-                });
-              }
-            }
-
-            return 100;
-          }
-          return prev + 5;
-        });
-      }, 800);
-    }
-    return () => clearInterval(interval);
-  }, [isDownloading, settings.browserNotifications]);
-
-  // Handler: Start download from input bar
-  const handleStartDownload = (rawUrl: string) => {
-    // Request notification permission on first interaction if enabled
+  // Handler: Start download from input bar by posting to the real server
+  const handleStartDownload = async (rawUrl: string) => {
+    // Request notification permission if enabled
     if (
       settings.browserNotifications &&
       'Notification' in window &&
@@ -166,81 +184,20 @@ export default function App() {
       Notification.requestPermission();
     }
 
-    const now = new Date();
-    const timeStr = now.toTimeString().split(' ')[0];
-
-    // Detect or parse title
-    let detectedTitle = 'Mangá Customizado';
-    let chapterName = 'Capítulo Novo';
-
-    if (rawUrl.toLowerCase().includes('one-piece') || rawUrl.toLowerCase().includes('onepiece')) {
-      detectedTitle = 'One Piece';
-      chapterName = 'Capítulo 1101';
-    } else if (rawUrl.toLowerCase().includes('naruto')) {
-      detectedTitle = 'Naruto: Next Generations';
-      chapterName = 'Capítulo 81';
-    } else if (rawUrl.toLowerCase().includes('bleach')) {
-      detectedTitle = 'Bleach: Thousand-Year Blood War';
-      chapterName = 'Capítulo Special';
-    } else if (rawUrl.trim().length > 0) {
-      const parts = rawUrl.split('/');
-      const lastPart = parts[parts.length - 1] || parts[parts.length - 2] || 'Capítulo';
-      detectedTitle = lastPart.replace(/-/g, ' ').toUpperCase() || 'Mangá Desconhecido';
+    try {
+      const res = await fetch('/api/download', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: rawUrl })
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        alert(data.error || 'Erro ao iniciar o download.');
+      }
+    } catch (e) {
+      console.error('Error starting download:', e);
+      alert('Erro de conexão ao servidor backend local.');
     }
-
-    // Add log entries
-    const newLogs: LogEntry[] = [
-      { id: String(Date.now() + 1), timestamp: timeStr, type: 'INFO', message: `Analisando URL: ${rawUrl}` },
-      { id: String(Date.now() + 2), timestamp: timeStr, type: 'INFO', message: `Fonte identificada: ${detectedTitle}` },
-      { id: String(Date.now() + 3), timestamp: timeStr, type: 'EXEC', message: `Iniciando extração de imagens de ${chapterName}...` },
-      { id: String(Date.now() + 4), timestamp: timeStr, type: 'OK', message: `Baixando página 1.jpg... [OK]` },
-    ];
-
-    setLogs((prev) => [...prev, ...newLogs]);
-    setActiveProgress(10);
-    setIsDownloading(true);
-
-    // Add new download task
-    const newTask: DownloadTask = {
-      id: `task-${Date.now()}`,
-      mangaTitle: detectedTitle,
-      chapterName: chapterName,
-      url: rawUrl,
-      progress: 10,
-      speed: '14.2 MB/s',
-      status: 'Downloading',
-      downloadedPages: 1,
-      totalPages: 18,
-      eta: '00:15s',
-      coverUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuC8wVPLgNML81wM9VkJG4kIfGc0CWxYcc-E2JDSJ9KluFiEJMpiaHvlqTVssLkGDtjz7pQokL30GXUcr1im2Q4nDXW9-H4lBfraywf0LyTrSLaKX8VxsrGPef6olKD1xruhW2mlV7BNVe-XmhcKhbuAbankEvZU-OBb5WL-8rhB5DYVI7C0L1j-Ptu1taWS6ojez5tcFVb21Tyc8KyryJuxEoU1gbU4F7_ErNqOTjs9jEZjdYAS35NEuw',
-      outputDir: `${outputDirectory}/${detectedTitle}`,
-    };
-
-    setTasks((prev) => [newTask, ...prev]);
-
-    // Add to Recent Mangas
-    const newManga: MangaItem = {
-      id: `manga-${Date.now()}`,
-      title: detectedTitle,
-      chapter: chapterName,
-      status: 'Baixando',
-      coverUrl: newTask.coverUrl,
-      author: 'Autor Desconhecido',
-      description: `Capítulo recentemente adicionado à biblioteca de automação via ${rawUrl}`,
-      format: 'CBZ',
-      fileSize: '32.1 MB',
-      downloadedAt: now.toISOString().slice(0, 16).replace('T', ' '),
-      pagesCount: 18,
-      chapterPages: [
-        {
-          pageNumber: 1,
-          imageUrl: newTask.coverUrl,
-          fileName: 'page_001.jpg',
-        },
-      ],
-    };
-
-    setMangas((prev) => [newManga, ...prev]);
     setUrlInput('');
   };
 
@@ -249,43 +206,30 @@ export default function App() {
   };
 
   const handleToggleTaskPause = (taskId: string) => {
-    setTasks((prev) =>
-      prev.map((t) => {
-        if (t.id === taskId) {
-          const newStatus = t.status === 'Paused' ? 'Downloading' : 'Paused';
-          return { ...t, status: newStatus };
-        }
-        return t;
-      })
-    );
+    // No pause support in real downloader for now
   };
 
   const handleCancelTask = (taskId: string) => {
     setTasks((prev) => prev.filter((t) => t.id !== taskId));
   };
 
-  const handleAddBatchTasks = (mangaTitle: string, chaptersStr: string) => {
-    const newTask: DownloadTask = {
-      id: `batch-${Date.now()}`,
-      mangaTitle: mangaTitle,
-      chapterName: `Lote Capítulos (${chaptersStr})`,
-      url: `https://mangadex.org/batch/${mangaTitle}`,
-      progress: 0,
-      speed: '0 KB/s',
-      status: 'Queued',
-      downloadedPages: 0,
-      totalPages: 120,
-      eta: 'Aguardando na Fila',
-      coverUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuAm5TTbGJoSnIhJ4ZIbfhB2u4nbBttlOvrEFrsJ5bZD1opL0-rA55W8JkBvd3lsuvaAME7uj24CSAWPxcdsY23jo0Kq2Y7uWHNVglj3c79Afl9s4O1lS3qErxCqQVy9KYZvj-kiTqmnbNpQPO2ZE3z2icy9FZvZUrqfkzSSGFGnG6lMeyjX208PHoZg29Dydigj7HpeEdPA10O_m5FDt7nJWHmzrM4qBYAtxBTaT5Z-CM_Ac7QKvJtfLg',
-      outputDir: `${outputDirectory}/${mangaTitle}`,
-    };
-    setTasks((prev) => [...prev, newTask]);
-    setCurrentTab('tasks');
+  const handleAddBatchTasks = async (mangaTitle: string, chaptersStr: string) => {
+    // Treat as raw search or name and direct to download
+    handleStartDownload(mangaTitle);
   };
 
-  const handleSaveSettings = (newSettings: AppSettings) => {
+  const handleSaveSettings = async (newSettings: AppSettings) => {
     setSettings(newSettings);
     setOutputDirectory(newSettings.outputDirectory);
+    try {
+      await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newSettings)
+      });
+    } catch (e) {
+      console.error('Error saving settings:', e);
+    }
   };
 
   return (

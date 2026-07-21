@@ -77,6 +77,102 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
         </div>
 
+        {/* Credentials / Access Token Card */}
+        <div className="bg-[#131b2e] border border-[#3c4a42] rounded-xl p-6 space-y-4">
+          <div className="flex items-center gap-2 text-[#4edea3] border-b border-[#3c4a42] pb-2">
+            <span className="material-symbols-outlined">key</span>
+            <h3 className="font-bold text-base text-[#dae2fd]">Credenciais de Acesso (Verdinha.wtf)</h3>
+          </div>
+
+          <div className="space-y-4">
+            {/* Login e Senha */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs font-mono text-[#bbcabf] uppercase tracking-wider block mb-1">
+                  Email ou Usuário
+                </label>
+                <input
+                  type="text"
+                  value={formData.email || ''}
+                  onChange={(e) =>
+                    setFormData({ ...formData, email: e.target.value })
+                  }
+                  placeholder="seu_email@provedor.com ou usuario"
+                  className="w-full bg-[#0b1326] border border-[#3c4a42] rounded-lg px-3 py-2 text-xs font-mono text-[#dae2fd] focus:border-[#4edea3] focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-mono text-[#bbcabf] uppercase tracking-wider block mb-1">
+                  Senha do Site
+                </label>
+                <input
+                  type="password"
+                  value={formData.password || ''}
+                  onChange={(e) =>
+                    setFormData({ ...formData, password: e.target.value })
+                  }
+                  placeholder="Sua senha secreta"
+                  className="w-full bg-[#0b1326] border border-[#3c4a42] rounded-lg px-3 py-2 text-xs font-mono text-[#dae2fd] focus:border-[#4edea3] focus:outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!formData.email || !formData.password) {
+                    alert('Insira seu email/usuário e senha para autenticar.');
+                    return;
+                  }
+                  try {
+                    const res = await fetch('/api/auth/login', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ email: formData.email, password: formData.password })
+                    });
+                    const data = await res.json();
+                    if (res.ok && data.success) {
+                      setFormData(prev => ({ ...prev, accessToken: data.accessToken }));
+                      alert('Autenticado com sucesso! O Token de Acesso foi gerado automaticamente.');
+                    } else {
+                      alert(data.error || 'Erro ao autenticar. Verifique suas credenciais.');
+                    }
+                  } catch (e) {
+                    console.error(e);
+                    alert('Erro de rede ao tentar autenticar.');
+                  }
+                }}
+                className="px-4 py-2 bg-[#222a3d] hover:bg-[#2d3449] border border-[#3c4a42] text-xs font-mono text-[#4edea3] rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[16px]">vpn_key</span>
+                <span>Autenticar e Gerar Token</span>
+              </button>
+            </div>
+
+            <div className="border-t border-[#3c4a42]/30 pt-3">
+              <label className="text-xs font-mono text-[#bbcabf] uppercase tracking-wider block mb-1">
+                Token de Acesso Manual (access_token)
+              </label>
+              <input
+                type="password"
+                value={formData.accessToken || ''}
+                onChange={(e) =>
+                  setFormData({ ...formData, accessToken: e.target.value })
+                }
+                placeholder="Gerado automaticamente após Autenticar, ou cole o cookie manualmente"
+                className="w-full bg-[#0b1326] border border-[#3c4a42] rounded-lg px-4 py-2.5 text-xs font-mono text-[#dae2fd] focus:border-[#4edea3] focus:outline-none"
+              />
+            </div>
+
+            <div className="bg-[#171f33]/60 rounded-lg p-3 border border-[#3c4a42]/30 text-xs text-[#86948a] space-y-1.5 leading-relaxed">
+              <p className="font-semibold text-[#dae2fd]">Como funciona a autenticação?</p>
+              <p>Insira seu email/usuário e senha do site Verdinha e clique em <strong className="text-[#dae2fd]">Autenticar e Gerar Token</strong>. O programa fará o login automático e obterá o token VIP necessário.</p>
+              <p className="text-[10px] text-[#86948a] italic">Nota: Suas credenciais são enviadas apenas diretamente para o site oficial do Verdinha para gerar o token e são salvas apenas na sua máquina local.</p>
+            </div>
+          </div>
+        </div>
+
         {/* Automatic Download & Clipboard Monitoring Card */}
         <div className="bg-[#131b2e] border border-[#3c4a42] rounded-xl p-6 space-y-4">
           <div className="flex items-center gap-2 text-[#4edea3] border-b border-[#3c4a42] pb-2">

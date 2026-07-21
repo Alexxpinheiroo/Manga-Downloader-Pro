@@ -181,7 +181,7 @@ export const INITIAL_TASKS: DownloadTask[] = [
 ];
 
 export const DEFAULT_SETTINGS: AppSettings = {
-  outputDirectory: '/Downloads/Mangas',
+  outputDirectory: 'g:/Manga-Downloader-Pro/downloads',
   concurrentDownloads: 4,
   maxThreads: 8,
   autoExtractCBZ: true,
@@ -192,5 +192,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   retryAttempts: 3,
   preferredQuality: 'Original',
   serverStatus: 'Online',
-  theme: 'Emerald Dark'
+  theme: 'Emerald Dark',
+  accessToken: '',
+  email: '',
+  password: ''
 };

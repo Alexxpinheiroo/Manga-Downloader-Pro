@@ -52,4 +52,7 @@ export interface AppSettings {
   preferredQuality: 'Original' | 'High (Compressed)' | 'Medium';
   serverStatus: 'Online' | 'Offline' | 'Busy';
   theme: 'Dark Cyber' | 'Emerald Dark';
+  accessToken?: string;
+  email?: string;
+  password?: string;
 }

@@ -1,0 +1,15 @@
+{
+  "outputDirectory": "G:\\Manga-Downloader-Pro\\downloads",
+  "concurrentDownloads": 4,
+  "maxThreads": 8,
+  "autoExtractCBZ": true,
+  "autoDownloadFromClipboard": true,
+  "browserNotifications": true,
+  "proxyEnabled": false,
+  "proxyAddress": "http://127.0.0.1:8080",
+  "retryAttempts": 3,
+  "preferredQuality": "Original",
+  "serverStatus": "Online",
+  "theme": "Emerald Dark",
+  "accessToken": ""
+}
