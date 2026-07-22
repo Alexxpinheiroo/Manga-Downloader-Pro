@@ -7,6 +7,7 @@ interface TasksViewProps {
   onCancelTask: (taskId: string) => void;
   onAddBatchTasks: (mangaTitle: string, chaptersStr: string) => void;
   onOpenDirectLinksModal: () => void;
+  onClearTasks: () => void;
 }
 
 export const TasksView: React.FC<TasksViewProps> = ({
@@ -15,6 +16,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
   onCancelTask,
   onAddBatchTasks,
   onOpenDirectLinksModal,
+  onClearTasks,
 }) => {
   const [batchTitle, setBatchTitle] = useState('');
   const [batchChapters, setBatchChapters] = useState('100-105');
@@ -30,7 +32,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
   return (
     <div className="flex flex-col gap-8 pb-12">
       {/* Header section */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#3c4a42] pb-4">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-[#3c4a42] pb-4">
         <div>
           <h2 className="text-2xl font-bold text-[#4edea3]">Gerenciador de Tarefas</h2>
           <p className="text-xs font-mono text-[#bbcabf]">
@@ -38,13 +40,24 @@ export const TasksView: React.FC<TasksViewProps> = ({
           </p>
         </div>
 
-        <button
-          onClick={onOpenDirectLinksModal}
-          className="self-start sm:self-auto px-4 py-2 bg-[#171f33] hover:bg-[#222a3d] border border-[#3c4a42] rounded-lg text-xs font-mono text-[#4edea3] flex items-center gap-2 transition-all"
-        >
-          <span className="material-symbols-outlined text-[18px]">image</span>
-          <span>Inspecionar Links de Imagens</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={onOpenDirectLinksModal}
+            className="px-4 py-2 bg-[#171f33] hover:bg-[#222a3d] border border-[#3c4a42] rounded-lg text-xs font-mono text-[#4edea3] flex items-center gap-2 transition-all cursor-pointer"
+          >
+            <span className="material-symbols-outlined text-[18px]">image</span>
+            <span>Links de Imagens</span>
+          </button>
+
+          <button
+            onClick={onClearTasks}
+            className="px-4 py-2 bg-[#171f33] hover:bg-red-500/20 hover:text-red-400 border border-red-500/30 rounded-lg text-xs font-mono text-red-300 flex items-center gap-2 transition-all cursor-pointer"
+            title="Limpa todas as tarefas concluídas, canceladas ou com erro da fila"
+          >
+            <span className="material-symbols-outlined text-[18px]">clear_all</span>
+            <span>Limpar Histórico da Fila</span>
+          </button>
+        </div>
       </div>
 
       {/* Batch Chapter Downloader Tool */}

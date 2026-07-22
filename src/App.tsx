@@ -259,6 +259,22 @@ export default function App() {
     }
   };
 
+  const handleClearTasks = async () => {
+    if (confirm('Tem certeza que deseja limpar todo o histórico de downloads concluídos, cancelados ou com erros da fila? Downloads ativos serão preservados.')) {
+      try {
+        const res = await fetch('/api/tasks/clear', { method: 'POST' });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success) {
+            setTasks(data.tasks);
+          }
+        }
+      } catch (e) {
+        console.error('Error clearing tasks:', e);
+      }
+    }
+  };
+
   const handleAddBatchTasks = async (mangaTitle: string, chaptersStr: string) => {
     // Treat as raw search or name and direct to download
     handleStartDownload(mangaTitle);
@@ -322,6 +338,7 @@ export default function App() {
             onCancelTask={handleCancelTask}
             onAddBatchTasks={handleAddBatchTasks}
             onOpenDirectLinksModal={() => setIsDirectLinksModalOpen(true)}
+            onClearTasks={handleClearTasks}
           />
         )}
 

@@ -771,6 +771,13 @@ async function startServer() {
     }
   });
 
+  app.post('/api/tasks/clear', (req, res) => {
+    const currentTasks = loadJson<any[]>(TASKS_FILE, []);
+    const active = currentTasks.filter(t => t.status === 'Downloading' || t.status === 'Paused');
+    saveJson(TASKS_FILE, active);
+    res.json({ success: true, tasks: active });
+  });
+
   app.post('/api/mangas/clear', (req, res) => {
     saveJson(MANGAS_FILE, []);
     res.json({ success: true });
