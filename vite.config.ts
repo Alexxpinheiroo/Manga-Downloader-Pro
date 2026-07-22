@@ -28,3 +28,5 @@ export default defineConfig(() => {
     },
   };
 });
+//abir o terminal 
+//para dar iniciar : npm rum dev
