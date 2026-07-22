@@ -24,7 +24,7 @@ export interface DownloadTask {
   url: string;
   progress: number;
   speed: string;
-  status: 'Downloading' | 'Queued' | 'Paused' | 'Completed' | 'Error';
+  status: 'Downloading' | 'Queued' | 'Paused' | 'Completed' | 'Error' | 'Cancelled';
   downloadedPages: number;
   totalPages: number;
   eta: string;

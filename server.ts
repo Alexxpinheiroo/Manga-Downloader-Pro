@@ -57,6 +57,12 @@ if (!fs.existsSync(TASKS_FILE)) saveJson(TASKS_FILE, []);
 // In-memory list of active SSE clients
 let sseClients: any[] = [];
 
+interface TaskState {
+  isPaused: boolean;
+  isCancelled: boolean;
+}
+const activeTasks = new Map<string, TaskState>();
+
 // Helper to broadcast events to all frontend clients
 function broadcastEvent(type: string, data: any) {
   sseClients.forEach(client => {
@@ -74,14 +80,15 @@ function logToClient(type: 'INFO' | 'EXEC' | 'OK' | 'WAIT' | 'WARN' | 'ERROR', m
 }
 
 // Image URL resolver logic extracted from verdinha.wtf source code
-function resolveImageUrl(src: string, chapterData: any): string {
+function resolveImageUrl(src: string, chapterData: any, pageData?: any): string {
   if (!src) return '';
   if (src.startsWith('http')) return src;
 
   const scanId = chapterData.scan_id || 1;
   const obrId = chapterData.obr_id || 0;
   const capNumero = chapterData.cap_numero !== undefined && chapterData.cap_numero !== null ? String(chapterData.cap_numero) : '';
-  const isWp = !!chapterData.is_wp;
+  const isPageWp = pageData && typeof pageData === 'object' && (!!pageData.is_wp || !!pageData.mime);
+  const isWp = !!chapterData.is_wp || isPageWp;
 
   const baseCdn = 'https://cdn.verdinha.wtf';
   const isWpType = src.startsWith('uploads/') || src.startsWith('wp-content/') || src.startsWith('manga_') || src.startsWith('WP-manga');
@@ -101,8 +108,11 @@ function resolveImageUrl(src: string, chapterData: any): string {
     return finalUrl.replace(/([^:])\/\/\/+/g, '$1/').replace(/([^:])\/\/+/g, '$1/');
   }
 
-  const relativePath = `scans/${scanId}/obras/${obrId}/capitulos/${capNumero}`;
-  const finalUrl = `${baseCdn}/${relativePath}/${src}`;
+  const pathPrefix = pageData && typeof pageData === 'object' && pageData.path 
+    ? pageData.path 
+    : `scans/${scanId}/obras/${obrId}/capitulos/${capNumero}`;
+
+  const finalUrl = `${baseCdn}/${pathPrefix.endsWith('/') || src.startsWith('/') ? '' : '/'}${pathPrefix}/${src}`;
   return finalUrl.replace(/([^:])\/\/\/+/g, '$1/').replace(/([^:])\/\/+/g, '$1/');
 }
 
@@ -177,8 +187,9 @@ function downloadFile(url: string, dest: string, headers: Record<string, string>
 }
 
 // Download engine
-async function downloadChapterTask(chapterId: string, outputBaseDir: string, accessToken: string, autoExtractCBZ: boolean) {
+async function downloadChapterTask(chapterId: string, outputBaseDir: string, accessToken: string, autoExtractCBZ: boolean): Promise<boolean> {
   const taskId = `task-${Date.now()}`;
+  activeTasks.set(taskId, { isPaused: false, isCancelled: false });
   logToClient('INFO', `Iniciando download do capítulo ID ${chapterId}`);
 
   // Fetch chapter metadata from Verdinha API
@@ -204,7 +215,8 @@ async function downloadChapterTask(chapterId: string, outputBaseDir: string, acc
           eta: 'Erro de Autenticação (403)'
         }
       });
-      return;
+      activeTasks.delete(taskId);
+      return false;
     }
     
     if (!response.ok) {
@@ -214,7 +226,8 @@ async function downloadChapterTask(chapterId: string, outputBaseDir: string, acc
     chapterData = await response.json();
   } catch (err: any) {
     logToClient('ERROR', `Erro ao buscar metadados do capítulo ${chapterId}: ${err.message}`);
-    return;
+    activeTasks.delete(taskId);
+    return false;
   }
 
   const mangaTitle = chapterData.obra?.obr_nome || 'Manga Desconhecido';
@@ -223,7 +236,8 @@ async function downloadChapterTask(chapterId: string, outputBaseDir: string, acc
 
   if (pages.length === 0) {
     logToClient('WARN', `O capítulo ${chapterNum} não possui páginas disponíveis.`);
-    return;
+    activeTasks.delete(taskId);
+    return false;
   }
 
   logToClient('INFO', `Metadados carregados: "${mangaTitle}" - ${chapterNum} (${pages.length} páginas)`);
@@ -250,7 +264,7 @@ async function downloadChapterTask(chapterId: string, outputBaseDir: string, acc
     url: `https://verdinha.wtf/?tab=lendo#/capitulo/${chapterId}`,
     progress: 5,
     speed: '0 MB/s',
-    status: 'Downloading',
+    status: 'Downloading' as const,
     downloadedPages: 0,
     totalPages: pages.length,
     eta: 'Calculando...',
@@ -287,11 +301,49 @@ async function downloadChapterTask(chapterId: string, outputBaseDir: string, acc
   const startTime = Date.now();
 
   for (let idx = 0; idx < pages.length; idx++) {
+    // Check cancellation
+    if (activeTasks.get(taskId)?.isCancelled) {
+      logToClient('WARN', `Download do capítulo ${chapterNum} foi cancelado pelo usuário.`);
+      const currentTasks = loadJson<any[]>(TASKS_FILE, []);
+      const idxT = currentTasks.findIndex(t => t.id === taskId);
+      if (idxT !== -1) {
+        currentTasks[idxT].status = 'Cancelled';
+        currentTasks[idxT].eta = 'Cancelado';
+        saveJson(TASKS_FILE, currentTasks);
+      }
+      broadcastEvent('task-update', { task: { id: taskId, status: 'Cancelled', eta: 'Cancelado' } });
+      activeTasks.delete(taskId);
+      return false;
+    }
+
+    // Check pause state
+    while (activeTasks.get(taskId)?.isPaused) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+      if (activeTasks.get(taskId)?.isCancelled) {
+        break; // Break pause loop
+      }
+    }
+
+    // Recheck cancellation
+    if (activeTasks.get(taskId)?.isCancelled) {
+      logToClient('WARN', `Download do capítulo ${chapterNum} foi cancelado pelo usuário.`);
+      const currentTasks = loadJson<any[]>(TASKS_FILE, []);
+      const idxT = currentTasks.findIndex(t => t.id === taskId);
+      if (idxT !== -1) {
+        currentTasks[idxT].status = 'Cancelled';
+        currentTasks[idxT].eta = 'Cancelado';
+        saveJson(TASKS_FILE, currentTasks);
+      }
+      broadcastEvent('task-update', { task: { id: taskId, status: 'Cancelled', eta: 'Cancelado' } });
+      activeTasks.delete(taskId);
+      return false;
+    }
+
     const rawPage = pages[idx];
     const pageSrc = typeof rawPage === 'string' ? rawPage : rawPage.src;
     if (!pageSrc) continue;
 
-    const pageUrl = resolveImageUrl(pageSrc, chapterData);
+    const pageUrl = resolveImageUrl(pageSrc, chapterData, rawPage);
     const ext = path.extname(new URL(pageUrl).pathname) || '.jpg';
     
     // Naming logic:
@@ -332,7 +384,7 @@ async function downloadChapterTask(chapterId: string, outputBaseDir: string, acc
       downloadedPages: successCount,
       speed,
       eta: progress === 100 ? 'Concluído' : eta,
-      status: progress === 100 ? 'Completed' : 'Downloading'
+      status: (progress === 100 ? 'Completed' : 'Downloading') as any
     };
 
     // Save to task history
@@ -346,7 +398,7 @@ async function downloadChapterTask(chapterId: string, outputBaseDir: string, acc
   }
 
   // Handle CBZ wrapping if enabled
-  let finalFormat = 'RAW';
+  let finalFormat: 'CBZ' | 'PDF' | 'ZIP' | 'RAW' = 'RAW';
   let finalSizeStr = '0 MB';
 
   if (autoExtractCBZ && successCount > 0) {
@@ -402,7 +454,7 @@ async function downloadChapterTask(chapterId: string, outputBaseDir: string, acc
     id: `manga-${Date.now()}`,
     title: cleanMangaTitle,
     chapter: cleanChapterName,
-    status: 'Salvo',
+    status: 'Salvo' as const,
     coverUrl: initialTask.coverUrl,
     author: chapterData.obra?.obr_autor || 'Autor Desconhecido',
     description: chapterData.obra?.obr_sinopse || `Capítulo baixado da URL via automação.`,
@@ -417,10 +469,13 @@ async function downloadChapterTask(chapterId: string, outputBaseDir: string, acc
   allMangas.unshift(newManga);
   saveJson(MANGAS_FILE, allMangas);
   broadcastEvent('manga-new', { manga: newManga });
+
+  activeTasks.delete(taskId);
+  return true;
 }
 
 // Scrape entire manga obra (all chapters)
-async function downloadObraTask(obraSlug: string, outputBaseDir: string, accessToken: string, autoExtractCBZ: boolean) {
+async function downloadObraTask(obraSlug: string, outputBaseDir: string, accessToken: string, autoExtractCBZ: boolean): Promise<boolean> {
   logToClient('INFO', `Buscando capítulos da obra: "${obraSlug}"`);
 
   const apiHeaders: Record<string, string> = {
@@ -437,7 +492,7 @@ async function downloadObraTask(obraSlug: string, outputBaseDir: string, accessT
     
     if (response.status === 403) {
       logToClient('ERROR', `Acesso negado para a obra ${obraSlug}. Forneça um Token de Acesso VIP nas Configurações.`);
-      return;
+      return false;
     }
     
     if (!response.ok) {
@@ -451,7 +506,7 @@ async function downloadObraTask(obraSlug: string, outputBaseDir: string, accessT
     
     if (chapters.length === 0) {
       logToClient('WARN', `Esta obra não possui capítulos para download.`);
-      return;
+      return true;
     }
 
     // Sort chapters in ascending order (older first)
@@ -460,14 +515,20 @@ async function downloadObraTask(obraSlug: string, outputBaseDir: string, accessT
     logToClient('INFO', `Iniciando download em lote de ${sortedChapters.length} capítulos...`);
 
     for (const chap of sortedChapters) {
-      await downloadChapterTask(String(chap.cap_id), outputBaseDir, accessToken, autoExtractCBZ);
+      const success = await downloadChapterTask(String(chap.cap_id), outputBaseDir, accessToken, autoExtractCBZ);
+      if (!success) {
+        logToClient('WARN', `Download em lote de "${obraData.obr_nome}" interrompido pelo usuário.`);
+        return false;
+      }
       // Tiny delay between chapters
       await new Promise(resolve => setTimeout(resolve, 2000));
     }
     
     logToClient('OK', `Download em lote de "${obraData.obr_nome}" concluído com sucesso!`);
+    return true;
   } catch (err: any) {
     logToClient('ERROR', `Erro ao buscar capítulos da obra "${obraSlug}": ${err.message}`);
+    return false;
   }
 }
 
@@ -511,7 +572,11 @@ async function downloadGenreTask(genreId: string, outputBaseDir: string, accessT
       const slug = obra.obr_slug || String(obra.obr_id);
       logToClient('INFO', `Enfileirando obra: "${obra.obr_nome}" (${slug})`);
       // Download the whole obra
-      await downloadObraTask(slug, outputBaseDir, accessToken, autoExtractCBZ);
+      const success = await downloadObraTask(slug, outputBaseDir, accessToken, autoExtractCBZ);
+      if (!success) {
+        logToClient('WARN', `Download do gênero ID ${genreId} interrompido pelo usuário.`);
+        break;
+      }
       // Small pause between obras to protect the server
       await new Promise(resolve => setTimeout(resolve, 5000));
     }
@@ -646,6 +711,80 @@ async function startServer() {
         res.status(400).json({ error: 'Não foi possível identificar o capítulo, obra ou categoria/gênero a partir da URL fornecida.' });
       }
     }
+  });
+
+  app.post('/api/tasks/:id/pause', (req, res) => {
+    const { id } = req.params;
+    const state = activeTasks.get(id);
+    if (state) {
+      state.isPaused = true;
+      const currentTasks = loadJson<any[]>(TASKS_FILE, []);
+      const idx = currentTasks.findIndex(t => t.id === id);
+      if (idx !== -1) {
+        currentTasks[idx].status = 'Paused';
+        currentTasks[idx].eta = 'Pausado';
+        saveJson(TASKS_FILE, currentTasks);
+        broadcastEvent('task-update', { task: currentTasks[idx] });
+      }
+      res.json({ success: true });
+    } else {
+      res.status(404).json({ error: 'Task not running' });
+    }
+  });
+
+  app.post('/api/tasks/:id/resume', (req, res) => {
+    const { id } = req.params;
+    const state = activeTasks.get(id);
+    if (state) {
+      state.isPaused = false;
+      const currentTasks = loadJson<any[]>(TASKS_FILE, []);
+      const idx = currentTasks.findIndex(t => t.id === id);
+      if (idx !== -1) {
+        currentTasks[idx].status = 'Downloading';
+        currentTasks[idx].eta = 'Calculando...';
+        saveJson(TASKS_FILE, currentTasks);
+        broadcastEvent('task-update', { task: currentTasks[idx] });
+      }
+      res.json({ success: true });
+    } else {
+      res.status(404).json({ error: 'Task not running' });
+    }
+  });
+
+  app.post('/api/tasks/:id/cancel', (req, res) => {
+    const { id } = req.params;
+    const state = activeTasks.get(id);
+    if (state) {
+      state.isCancelled = true;
+    }
+    // Update the task file anyway so that it's cancelled even if it finished or wasn't running
+    const currentTasks = loadJson<any[]>(TASKS_FILE, []);
+    const idx = currentTasks.findIndex(t => t.id === id);
+    if (idx !== -1) {
+      currentTasks[idx].status = 'Cancelled';
+      currentTasks[idx].eta = 'Cancelado';
+      saveJson(TASKS_FILE, currentTasks);
+      broadcastEvent('task-update', { task: currentTasks[idx] });
+      res.json({ success: true });
+    } else {
+      res.status(404).json({ error: 'Task not found' });
+    }
+  });
+
+  app.post('/api/mangas/clear', (req, res) => {
+    saveJson(MANGAS_FILE, []);
+    res.json({ success: true });
+  });
+
+  app.post('/api/mangas/clear-covers', (req, res) => {
+    const allMangas = loadJson<any[]>(MANGAS_FILE, []);
+    const updated = allMangas.map(m => ({
+      ...m,
+      coverUrl: '',
+      chapterPages: []
+    }));
+    saveJson(MANGAS_FILE, updated);
+    res.json({ success: true });
   });
 
   // Server-Sent Events endpoint

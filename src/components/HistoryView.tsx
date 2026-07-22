@@ -5,12 +5,16 @@ interface HistoryViewProps {
   mangas: MangaItem[];
   onSelectMangaForReader: (manga: MangaItem) => void;
   onOpenDirectLinksModal: () => void;
+  onClearHistory: () => void;
+  onRemoveHistoryCovers: () => void;
 }
 
 export const HistoryView: React.FC<HistoryViewProps> = ({
   mangas,
   onSelectMangaForReader,
   onOpenDirectLinksModal,
+  onClearHistory,
+  onRemoveHistoryCovers,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedFormatFilter, setSelectedFormatFilter] = useState<'ALL' | 'CBZ' | 'PDF' | 'ZIP'>('ALL');
@@ -27,7 +31,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   return (
     <div className="flex flex-col gap-8 pb-12">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#3c4a42] pb-4">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-[#3c4a42] pb-4">
         <div>
           <h2 className="text-2xl font-bold text-[#4edea3]">Histórico de Downloads & Biblioteca</h2>
           <p className="text-xs font-mono text-[#bbcabf]">
@@ -35,13 +39,33 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
           </p>
         </div>
 
-        <button
-          onClick={onOpenDirectLinksModal}
-          className="px-4 py-2 bg-[#10b981] text-[#003824] font-bold text-xs rounded-lg emerald-glow flex items-center gap-2 hover:bg-[#6ffbbe] transition-all"
-        >
-          <span className="material-symbols-outlined text-[18px]">link</span>
-          <span>Copiar Todos os Links de Imagens</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={onOpenDirectLinksModal}
+            className="px-4 py-2 bg-[#10b981] text-[#003824] font-bold text-xs rounded-lg emerald-glow flex items-center gap-2 hover:bg-[#6ffbbe] transition-all cursor-pointer"
+          >
+            <span className="material-symbols-outlined text-[18px]">link</span>
+            <span>Copiar Links de Imagens</span>
+          </button>
+
+          <button
+            onClick={onRemoveHistoryCovers}
+            className="px-4 py-2 bg-[#171f33] hover:bg-amber-500/20 hover:text-amber-400 border border-amber-500/30 text-xs font-mono text-amber-300 flex items-center gap-2 rounded-lg transition-all cursor-pointer"
+            title="Remove todas as capas e imagens dos metadados do histórico"
+          >
+            <span className="material-symbols-outlined text-[18px]">no_photography</span>
+            <span>Remover Imagens/Capas</span>
+          </button>
+
+          <button
+            onClick={onClearHistory}
+            className="px-4 py-2 bg-[#171f33] hover:bg-red-500/20 hover:text-red-400 border border-red-500/30 text-xs font-mono text-red-300 flex items-center gap-2 rounded-lg transition-all cursor-pointer"
+            title="Apaga todo o histórico da biblioteca"
+          >
+            <span className="material-symbols-outlined text-[18px]">delete_sweep</span>
+            <span>Apagar Histórico</span>
+          </button>
+        </div>
       </div>
 
       {/* Filter and Search Bar */}

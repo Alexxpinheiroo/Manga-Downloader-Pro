@@ -205,12 +205,58 @@ export default function App() {
     setLogs([]);
   };
 
-  const handleToggleTaskPause = (taskId: string) => {
-    // No pause support in real downloader for now
+  const handleToggleTaskPause = async (taskId: string) => {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+    const isCurrentlyPaused = task.status === 'Paused';
+    try {
+      const endpoint = isCurrentlyPaused ? 'resume' : 'pause';
+      const res = await fetch(`/api/tasks/${taskId}/${endpoint}`, { method: 'POST' });
+      if (res.ok) {
+        setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: isCurrentlyPaused ? 'Downloading' : 'Paused' } : t));
+      }
+    } catch (e) {
+      console.error('Error toggling pause:', e);
+    }
   };
 
-  const handleCancelTask = (taskId: string) => {
-    setTasks((prev) => prev.filter((t) => t.id !== taskId));
+  const handleCancelTask = async (taskId: string) => {
+    if (confirm('Deseja realmente cancelar este download?')) {
+      try {
+        const res = await fetch(`/api/tasks/${taskId}/cancel`, { method: 'POST' });
+        if (res.ok) {
+          setTasks((prev) => prev.filter((t) => t.id !== taskId));
+        }
+      } catch (e) {
+        console.error('Error cancelling task:', e);
+      }
+    }
+  };
+
+  const handleClearHistory = async () => {
+    if (confirm('Tem certeza que deseja apagar todo o histórico de downloads? Os arquivos baixados no disco serão preservados.')) {
+      try {
+        const res = await fetch('/api/mangas/clear', { method: 'POST' });
+        if (res.ok) {
+          setMangas([]);
+        }
+      } catch (e) {
+        console.error('Error clearing history:', e);
+      }
+    }
+  };
+
+  const handleRemoveHistoryCovers = async () => {
+    if (confirm('Deseja remover as capas e imagens salvas do histórico? As informações de texto serão preservadas.')) {
+      try {
+        const res = await fetch('/api/mangas/clear-covers', { method: 'POST' });
+        if (res.ok) {
+          setMangas(prev => prev.map(m => ({ ...m, coverUrl: '', chapterPages: [] })));
+        }
+      } catch (e) {
+        console.error('Error clearing history covers:', e);
+      }
+    }
   };
 
   const handleAddBatchTasks = async (mangaTitle: string, chaptersStr: string) => {
@@ -284,6 +330,8 @@ export default function App() {
             mangas={mangas}
             onSelectMangaForReader={(manga) => setSelectedReaderManga(manga)}
             onOpenDirectLinksModal={() => setIsDirectLinksModalOpen(true)}
+            onClearHistory={handleClearHistory}
+            onRemoveHistoryCovers={handleRemoveHistoryCovers}
           />
         )}
 
