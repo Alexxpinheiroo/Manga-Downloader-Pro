@@ -108,9 +108,15 @@ function resolveImageUrl(src: string, chapterData: any, pageData?: any): string 
     return finalUrl.replace(/([^:])\/\/\/+/g, '$1/').replace(/([^:])\/\/+/g, '$1/');
   }
 
-  const pathPrefix = pageData && typeof pageData === 'object' && pageData.path 
-    ? pageData.path 
-    : `scans/${scanId}/obras/${obrId}/capitulos/${capNumero}`;
+  let pathPrefix = `scans/${scanId}/obras/${obrId}/capitulos/${capNumero}`;
+  if (pageData && typeof pageData === 'object' && pageData.path) {
+    const cleanSrc = src.replace(/^\//, '');
+    if (pageData.path.endsWith(src) || pageData.path.endsWith(cleanSrc)) {
+      const finalUrl = `${baseCdn}/${pageData.path}`;
+      return finalUrl.replace(/([^:])\/\/\/+/g, '$1/').replace(/([^:])\/\/+/g, '$1/');
+    }
+    pathPrefix = pageData.path;
+  }
 
   const finalUrl = `${baseCdn}/${pathPrefix.endsWith('/') || src.startsWith('/') ? '' : '/'}${pathPrefix}/${src}`;
   return finalUrl.replace(/([^:])\/\/\/+/g, '$1/').replace(/([^:])\/\/+/g, '$1/');
